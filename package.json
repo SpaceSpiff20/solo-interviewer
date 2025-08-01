@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --target ES2020 --module ESNext --moduleResolution node --esModuleInterop true --allowSyntheticDefaultImports true --strict true --skipLibCheck true --forceConsistentCasingInFileNames true --outDir ./api --rootDir ./api --declaration false --noEmit false api/*.ts && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

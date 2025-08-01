@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { Readable } from 'node:stream';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -87,7 +88,22 @@ Guidelines:
     // Stream the audio response
     const speechifyStream = speechifyResponse.body;
     if (speechifyStream) {
-      speechifyStream.pipe(res);
+      // Convert ReadableStream to Node.js stream
+      const reader = speechifyStream.getReader();
+      const readable = new Readable({
+        read() {
+          reader.read().then(({ done, value }) => {
+            if (done) {
+              this.push(null);
+            } else {
+              this.push(value);
+            }
+          }).catch(err => {
+            this.destroy(err);
+          });
+        }
+      });
+      readable.pipe(res);
     } else {
       throw new Error('No audio stream received from Speechify');
     }

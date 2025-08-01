@@ -1,9 +1,9 @@
 {
   "functions": {
-    "api/interview.ts": {
+    "api/interview.js": {
       "maxDuration": 30
     },
-    "api/reflection.ts": {
+    "api/reflection.js": {
       "maxDuration": 30
     }
   },
