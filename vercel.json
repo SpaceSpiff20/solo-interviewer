@@ -1,12 +1,4 @@
 {
-  "functions": {
-    "api/interview.cts": {
-      "maxDuration": 30
-    },
-    "api/reflection.cts": {
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
