@@ -18,7 +18,11 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       conversationHistoryLength: conversationHistory?.length || 0,
       hasOpenAIKey: !!apiKeys?.openai,
       hasSpeechifyKey: !!apiKeys?.speechify,
-      hasInterviewData: !!interviewData
+      hasInterviewData: !!interviewData,
+      openaiKeyLength: apiKeys?.openai?.length || 0,
+      speechifyKeyLength: apiKeys?.speechify?.length || 0,
+      openaiKeyStart: apiKeys?.openai?.substring(0, 10) || 'none',
+      speechifyKeyStart: apiKeys?.speechify?.substring(0, 10) || 'none'
     });
 
     if (!apiKeys?.openai || !apiKeys?.speechify) {
