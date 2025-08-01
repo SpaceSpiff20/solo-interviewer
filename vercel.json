@@ -1,6 +1,8 @@
 {
    "functions": {
-    "api/**/*.cts": {}
+    "api/**/*.cts": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
     {
