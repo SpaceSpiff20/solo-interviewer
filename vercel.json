@@ -1,4 +1,7 @@
 {
+   "functions": {
+    "api/**/*.cts": {}
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
