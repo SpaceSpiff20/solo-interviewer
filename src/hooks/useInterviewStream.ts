@@ -203,6 +203,8 @@ export function useInterviewStream({
 
   const sendTranscriptToAPI = useCallback(async (transcript: string, conversationHistory: any[]) => {
     try {
+      console.log('Sending transcript to API:', transcript);
+      
       const response = await fetch('/api/interview', {
         method: 'POST',
         headers: {
@@ -217,7 +219,9 @@ export function useInterviewStream({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get interviewer response');
+        const errorText = await response.text();
+        console.error('API response error:', response.status, errorText);
+        throw new Error(`Failed to get interviewer response: ${response.status} - ${errorText}`);
       }
 
       // Handle streaming audio response
@@ -225,19 +229,33 @@ export function useInterviewStream({
       const chunks: Uint8Array[] = [];
 
       if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
 
-        // Create audio blob and play
-        const audioBlob = new Blob(chunks, { type: 'audio/mpeg' });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        await playInterviewerAudio(audioUrl);
+          if (chunks.length === 0) {
+            throw new Error('No audio data received from API');
+          }
+
+          // Create audio blob and play
+          const audioBlob = new Blob(chunks, { type: 'audio/mpeg' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          await playInterviewerAudio(audioUrl);
+        } catch (streamError) {
+          console.error('Stream reading error:', streamError);
+          const errorMessage = streamError instanceof Error ? streamError.message : 'Unknown stream error';
+          throw new Error(`Failed to read audio stream: ${errorMessage}`);
+        }
+      } else {
+        throw new Error('No response body available');
       }
     } catch (error) {
-      onError('Failed to communicate with interviewer API');
+      console.error('Interview API error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      onError(`Failed to communicate with interviewer API: ${errorMessage}`);
     }
   }, [apiKeys, interviewData, playInterviewerAudio, onError]);
 

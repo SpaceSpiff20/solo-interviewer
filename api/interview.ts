@@ -10,7 +10,16 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { transcript, conversationHistory, apiKeys, interviewData } = req.body;
 
+    console.log('Received request with:', {
+      hasTranscript: !!transcript,
+      conversationHistoryLength: conversationHistory?.length || 0,
+      hasOpenAIKey: !!apiKeys?.openai,
+      hasSpeechifyKey: !!apiKeys?.speechify,
+      hasInterviewData: !!interviewData
+    });
+
     if (!apiKeys?.openai || !apiKeys?.speechify) {
+      console.error('Missing API keys:', { openai: !!apiKeys?.openai, speechify: !!apiKeys?.speechify });
       return res.status(400).json({ error: 'Missing required API keys' });
     }
 
@@ -36,6 +45,7 @@ Guidelines:
     ];
 
     // Call OpenAI API
+    console.log('Calling OpenAI API with messages:', messages.length);
     const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -51,7 +61,9 @@ Guidelines:
     });
 
     if (!openaiResponse.ok) {
-      throw new Error(`OpenAI API error: ${openaiResponse.status}`);
+      const errorText = await openaiResponse.text();
+      console.error('OpenAI API error:', openaiResponse.status, errorText);
+      throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorText}`);
     }
 
     const openaiData = await openaiResponse.json();
@@ -62,6 +74,7 @@ Guidelines:
     }
 
     // Call Speechify TTS API
+    console.log('Calling Speechify API with response:', interviewerResponse.substring(0, 100) + '...');
     const speechifyResponse = await fetch('https://api.speechify.com/v1/audio/speech', {
       method: 'POST',
       headers: {
@@ -77,7 +90,9 @@ Guidelines:
     });
 
     if (!speechifyResponse.ok) {
-      throw new Error(`Speechify API error: ${speechifyResponse.status}`);
+      const errorText = await speechifyResponse.text();
+      console.error('Speechify API error:', speechifyResponse.status, errorText);
+      throw new Error(`Speechify API error: ${speechifyResponse.status} - ${errorText}`);
     }
 
     // Set headers for audio streaming
@@ -87,22 +102,43 @@ Guidelines:
 
     // Stream the audio response
     const speechifyStream = speechifyResponse.body;
+    console.log('Speechify stream available:', !!speechifyStream);
     if (speechifyStream) {
       // Convert ReadableStream to Node.js stream
       const reader = speechifyStream.getReader();
+      let chunkCount = 0;
       const readable = new Readable({
         read() {
           reader.read().then(({ done, value }) => {
             if (done) {
+              console.log('Stream completed, total chunks:', chunkCount);
               this.push(null);
             } else {
+              chunkCount++;
+              if (chunkCount % 10 === 0) {
+                console.log('Stream chunk:', chunkCount, 'size:', value?.length);
+              }
               this.push(value);
             }
           }).catch(err => {
+            console.error('Stream reading error:', err);
             this.destroy(err);
           });
         }
       });
+      
+      // Handle stream errors
+      readable.on('error', (err) => {
+        console.error('Readable stream error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Stream error', details: err.message });
+        }
+      });
+      
+      res.on('error', (err) => {
+        console.error('Response stream error:', err);
+      });
+      
       readable.pipe(res);
     } else {
       throw new Error('No audio stream received from Speechify');
@@ -110,6 +146,13 @@ Guidelines:
 
   } catch (error) {
     console.error('Interview API error:', error);
+    
+    // If headers have already been sent, we can't send JSON response
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
+    
     res.status(500).json({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
