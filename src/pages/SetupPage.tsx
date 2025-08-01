@@ -92,7 +92,7 @@ export function SetupPage({ onStartInterview }: SetupPageProps) {
                 
                 <MultiPageTextInput
                   pages={textInputPages}
-                  values={interviewData as Record<string, string>}
+                  values={interviewData as unknown as Record<string, string>}
                   onChange={handleTextChange}
                   onComplete={handleTextComplete}
                 />
