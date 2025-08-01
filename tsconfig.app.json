@@ -20,6 +20,9 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
+    /* Module interoperability */
+    "esModuleInterop": true,
+
     /* for ShadCN */
     "baseUrl": ".",
     "paths": {
