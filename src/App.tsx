@@ -38,6 +38,7 @@ function App() {
 
   const handleLogin = (email: string) => {
     setCurrentPhase('setup');
+    console.log(email);
   };
 
   const handleStartInterview = (data: InterviewData, interviewSettings: InterviewSettings, keys: APIKeys) => {
