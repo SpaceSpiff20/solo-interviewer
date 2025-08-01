@@ -7,7 +7,6 @@ import { InterviewPhase, InterviewData, InterviewSettings, APIKeys, FeedbackMome
 
 function App() {
   const [currentPhase, setCurrentPhase] = useState<InterviewPhase>('landing');
-  const [userEmail, setUserEmail] = useState('');
   const [interviewData, setInterviewData] = useState<InterviewData>({
     jobDescription: '',
     resume: '',
@@ -38,7 +37,6 @@ function App() {
   });
 
   const handleLogin = (email: string) => {
-    setUserEmail(email);
     setCurrentPhase('setup');
   };
 
