@@ -101,4 +101,4 @@ Guidelines:
   }
 }
 
-module.exports = handler;
+export default handler;

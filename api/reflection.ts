@@ -91,4 +91,4 @@ Format your response as JSON:
   }
 }
 
-module.exports = handler;
+export default handler;
