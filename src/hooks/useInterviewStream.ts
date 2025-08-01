@@ -26,6 +26,7 @@ export function useInterviewStream({
   const audioContext = useRef<AudioContext | null>(null);
   const analyser = useRef<AnalyserNode | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const isListeningRef = useRef(false);
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -39,35 +40,41 @@ export function useInterviewStream({
 
       // Initialize audio context for visualization
       audioContext.current = new AudioContext({ sampleRate: 16000 });
+      
+      // Resume audio context if suspended (required for autoplay policy)
+      if (audioContext.current.state === 'suspended') {
+        await audioContext.current.resume();
+      }
+      
       const source = audioContext.current.createMediaStreamSource(stream);
       analyser.current = audioContext.current.createAnalyser();
       analyser.current.fftSize = 256;
+      analyser.current.smoothingTimeConstant = 0.8;
       source.connect(analyser.current);
 
       // Start audio level monitoring
       const monitorAudioLevel = () => {
-        if (analyser.current) {
-          const dataArray = new Uint8Array(analyser.current.frequencyBinCount);
-          analyser.current.getByteFrequencyData(dataArray);
-          const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-          setAudioLevel(average / 255);
+        try {
+          if (analyser.current && isListeningRef.current) {
+            const dataArray = new Uint8Array(analyser.current.frequencyBinCount);
+            analyser.current.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            setAudioLevel(average / 255);
+          }
+        } catch (error) {
+          console.error('Error monitoring audio level:', error);
         }
-        if (isListening) {
-          requestAnimationFrame(monitorAudioLevel);
-        }
+        requestAnimationFrame(monitorAudioLevel);
       };
-
-      // Initialize MediaRecorder for Deepgram
-      mediaRecorder.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      monitorAudioLevel();
 
       return stream;
     } catch (error) {
+      console.error('Failed to initialize audio:', error);
       onError('Failed to access microphone');
       throw error;
     }
-  }, [isListening, onError]);
+  }, [onError]);
 
   const connectToDeepgram = useCallback(() => {
     if (!apiKeys.deepgram) {
@@ -106,7 +113,13 @@ export function useInterviewStream({
 
   const startListening = useCallback(async () => {
     try {
-      await initializeAudio();
+      const stream = await initializeAudio();
+      
+      // Initialize MediaRecorder for Deepgram
+      mediaRecorder.current = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
       connectToDeepgram();
       
       if (mediaRecorder.current && deepgramSocket.current) {
@@ -119,23 +132,12 @@ export function useInterviewStream({
         mediaRecorder.current.start(100); // Send data every 100ms
         setIsListening(true);
         setIsSpeaking(true);
-
-        // Start audio level monitoring
-        const monitorAudioLevel = () => {
-          if (analyser.current && isListening) {
-            const dataArray = new Uint8Array(analyser.current.frequencyBinCount);
-            analyser.current.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-            setAudioLevel(average / 255);
-            requestAnimationFrame(monitorAudioLevel);
-          }
-        };
-        monitorAudioLevel();
+        isListeningRef.current = true;
       }
     } catch (error) {
       onError('Failed to start listening');
     }
-  }, [initializeAudio, connectToDeepgram, isListening, onError]);
+  }, [initializeAudio, connectToDeepgram, onError]);
 
   const stopListening = useCallback(() => {
     if (mediaRecorder.current) {
@@ -150,6 +152,7 @@ export function useInterviewStream({
     setIsListening(false);
     setIsSpeaking(false);
     setAudioLevel(0);
+    isListeningRef.current = false;
   }, []);
 
   const playInterviewerAudio = useCallback(async (audioUrl: string) => {
