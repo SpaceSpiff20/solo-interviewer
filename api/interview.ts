@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Readable } from 'node:stream';
+import { SpeechifyClient } from "@speechify/api";
 
 // Add timeout handling
 const TIMEOUT_MS = 25000; // 25 seconds to stay under 30s limit
@@ -11,23 +12,27 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { transcript, conversationHistory, apiKeys, interviewData } = req.body;
+    const { transcript, conversationHistory, apiKeys, interviewData, voice = 'oliver' } = req.body;
 
     console.log('Received request with:', {
       hasTranscript: !!transcript,
       conversationHistoryLength: conversationHistory?.length || 0,
       hasOpenAIKey: !!apiKeys?.openai,
       hasSpeechifyKey: !!apiKeys?.speechify,
+      voice: voice,
       hasInterviewData: !!interviewData,
       openaiKeyLength: apiKeys?.openai?.length || 0,
-      speechifyKeyLength: apiKeys?.speechify?.length || 0,
-      openaiKeyStart: apiKeys?.openai?.substring(0, 10) || 'none',
-      speechifyKeyStart: apiKeys?.speechify?.substring(0, 10) || 'none'
+      openaiKeyStart: apiKeys?.openai?.substring(0, 10) || 'none'
     });
 
-    if (!apiKeys?.openai || !apiKeys?.speechify) {
-      console.error('Missing API keys:', { openai: !!apiKeys?.openai, speechify: !!apiKeys?.speechify });
-      return res.status(400).json({ error: 'Missing required API keys' });
+    // Debug conversation history structure
+    if (conversationHistory?.length > 0) {
+      console.log('Conversation history sample:', conversationHistory[0]);
+    }
+
+    if (!apiKeys?.openai) {
+      console.error('Missing API key:', { openai: !!apiKeys?.openai });
+      return res.status(400).json({ error: 'Missing required OpenAI API key' });
     }
 
     // Prepare the conversation context for OpenAI
@@ -45,14 +50,29 @@ Guidelines:
 - If the candidate gives a good comprehensive answer, acknowledge it briefly before the next question
 - End the interview naturally when you've covered key areas`;
 
+    // Format conversation history to match OpenAI API requirements
+    const formattedHistory = conversationHistory?.filter((msg: any) => 
+      msg && (msg.text || msg.content) && msg.speaker
+    ).map((msg: any) => ({
+      role: msg.speaker === 'user' ? 'user' : 'assistant',
+      content: msg.text || msg.content
+    })) || [];
+
     const messages = [
       { role: 'system', content: systemPrompt },
-      ...conversationHistory,
+      ...formattedHistory,
       { role: 'user', content: transcript }
     ];
 
-    // Call OpenAI API with timeout
-    console.log('Calling OpenAI API with messages:', messages.length);
+    console.log('Formatted messages for OpenAI:', {
+      totalMessages: messages.length,
+      formattedHistoryLength: formattedHistory.length,
+      systemPromptLength: systemPrompt.length,
+      transcriptLength: transcript.length
+    });
+
+    // First, generate the text response using GPT-4o
+    console.log('Calling OpenAI API to generate interview response...');
     const openaiController = new AbortController();
     const openaiTimeout = setTimeout(() => openaiController.abort(), 15000); // 15 second timeout
     
@@ -99,115 +119,90 @@ Guidelines:
       throw openaiError;
     }
 
-    // Call Speechify TTS API with timeout
-    console.log('Calling Speechify API with response:', interviewerResponse.substring(0, 100) + '...');
-    const speechifyController = new AbortController();
-    const speechifyTimeout = setTimeout(() => speechifyController.abort(), 15000); // 15 second timeout
+    // Then, convert the response to speech using Speechify (if available) or OpenAI TTS
+    console.log('Converting response to speech...');
+    const ttsController = new AbortController();
+    const ttsTimeout = setTimeout(() => ttsController.abort(), 15000); // 15 second timeout
     
-    let speechifyResponse: Response;
+    let audioData: ArrayBuffer;
     
     try {
-      speechifyResponse = await fetch('https://api.speechify.com/v1/audio/speech', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKeys.speechify}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input: interviewerResponse,
-          voice_id: 'oliver',
-          audio_format: 'mp3',
-          sample_rate: 24000,
-        }),
-        signal: speechifyController.signal,
-      });
-
-      clearTimeout(speechifyTimeout);
-
-      if (!speechifyResponse.ok) {
-        const errorText = await speechifyResponse.text();
-        console.error('Speechify API error:', speechifyResponse.status, errorText);
-        throw new Error(`Speechify API error: ${speechifyResponse.status} - ${errorText}`);
-      }
-      
-      console.log('Speechify API call successful');
-      
-    } catch (speechifyError) {
-      clearTimeout(speechifyTimeout);
-      if (speechifyError instanceof Error && speechifyError.name === 'AbortError') {
-        throw new Error('Speechify API request timed out');
-      }
-      throw speechifyError;
-    }
-
-    // Headers will be set when sending the response
-
-    // Get the audio response from Speechify
-    const speechifyStream = speechifyResponse.body;
-    console.log('Speechify stream available:', !!speechifyStream);
-    
-    if (!speechifyStream) {
-      throw new Error('No audio stream received from Speechify');
-    }
-
-    // Set up timeout
-    const timeout = setTimeout(() => {
-      console.error('Stream timeout after', TIMEOUT_MS, 'ms');
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Stream timeout', details: 'Audio generation took too long' });
-      }
-    }, TIMEOUT_MS);
-
-    try {
-      // Read all chunks into a buffer
-      const reader = speechifyStream.getReader();
-      let chunkCount = 0;
-      const chunks: Uint8Array[] = [];
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        chunkCount++;
+      if (apiKeys.speechify) {
+        // Use Speechify for higher quality TTS
+        console.log('Using Speechify for TTS...');
+        const client = new SpeechifyClient({ token: apiKeys.speechify });
         
-        if (chunkCount % 10 === 0) {
-          console.log('Stream chunk:', chunkCount, 'size:', value?.length);
-        }
-      }
-      
-      console.log('Stream completed, total chunks:', chunkCount);
-      
-      // Clear timeout since we completed successfully
-      clearTimeout(timeout);
-      
-      if (chunks.length === 0) {
-        throw new Error('No audio data received from Speechify');
-      }
-      
-      // Combine all chunks into a single buffer
-      const audioBuffer = Buffer.concat(chunks);
-      console.log('Total audio size:', audioBuffer.length, 'bytes');
-      
-      // Send as single response
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Content-Length', audioBuffer.length.toString());
-      res.setHeader('Cache-Control', 'no-cache');
-      
-      res.end(audioBuffer);
-      
-    } catch (streamError) {
-      clearTimeout(timeout);
-      console.error('Stream processing error:', streamError);
-      
-      // If we can't get audio, return a simple text response
-      if (!res.headersSent) {
-        res.status(500).json({ 
-          error: 'Audio generation failed', 
-          details: streamError instanceof Error ? streamError.message : 'Unknown stream error',
-          fallback: 'Text response only'
+        // Map voice to Speechify voice ID
+        const speechifyVoiceId = voice === 'oliver' ? 'oliver' : 'oliver'; // Default to oliver for now
+        
+        const speechifyResponse = await client.tts.audio.stream({
+          accept: "audio/mpeg",
+          input: interviewerResponse,
+          language: "en",
+          model: "simba-english",
+          voiceId: speechifyVoiceId
         });
+
+        clearTimeout(ttsTimeout);
+
+        // Convert Readable stream to ArrayBuffer
+        const chunks: Buffer[] = [];
+        for await (const chunk of speechifyResponse) {
+          chunks.push(Buffer.from(chunk));
+        }
+        
+        audioData = Buffer.concat(chunks);
+        console.log('Speechify TTS response received, audio size:', audioData.byteLength, 'bytes');
+        
+      } else {
+        // Fallback to OpenAI TTS
+        console.log('Using OpenAI TTS (fallback)...');
+        const ttsResponse = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKeys.openai}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'tts-1',
+            input: interviewerResponse,
+            voice: voice === 'oliver' ? 'alloy' : voice, // Map oliver to alloy for OpenAI
+            response_format: 'mp3',
+            speed: 1.0,
+          }),
+          signal: ttsController.signal,
+        });
+
+        clearTimeout(ttsTimeout);
+
+        if (!ttsResponse.ok) {
+          const errorText = await ttsResponse.text();
+          console.error('OpenAI TTS API error:', ttsResponse.status, errorText);
+          throw new Error(`OpenAI TTS API error: ${ttsResponse.status} - ${errorText}`);
+        }
+
+        audioData = await ttsResponse.arrayBuffer();
+        console.log('OpenAI TTS response received, audio size:', audioData.byteLength, 'bytes');
       }
+      
+    } catch (ttsError) {
+      clearTimeout(ttsTimeout);
+      if (ttsError instanceof Error && ttsError.name === 'AbortError') {
+        throw new Error('TTS API request timed out');
+      }
+      throw ttsError;
     }
+
+    // Send the audio response
+    console.log('Sending audio response...');
+    
+    // Set headers for audio response
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', audioData.byteLength.toString());
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    // Send the audio buffer
+    res.end(Buffer.from(audioData));
 
   } catch (error) {
     console.error('Interview API error:', error);

@@ -10,8 +10,8 @@ export interface InterviewSettings {
 
 export interface APIKeys {
   deepgram: string;
-  speechify: string;
   openai: string;
+  speechify?: string;
 }
 
 export interface InterviewData {

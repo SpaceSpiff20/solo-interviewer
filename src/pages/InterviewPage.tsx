@@ -22,6 +22,7 @@ export function InterviewPage({
   const [timeRemaining, setTimeRemaining] = useState(settings.duration * 60);
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [isSpeechBuffering, setIsSpeechBuffering] = useState(false);
   const [liveFeedbackSuggestions, setLiveFeedbackSuggestions] = useState([
     {
       id: '1',
@@ -47,17 +48,29 @@ export function InterviewPage({
   } = useInterviewStream({
     apiKeys,
     interviewData,
+    voice: settings.voice,
     onTranscript: (transcript, isFinal) => {
+      // Always update the current transcript for display
       setCurrentTranscript(transcript);
-      if (isFinal) {
+      
+      // Set buffering state based on whether we have a transcript
+      setIsSpeechBuffering(transcript.trim().length > 0);
+      
+      // Only process final transcripts
+      if (isFinal && transcript.trim().length > 0) {
         const newTranscript = {
           speaker: 'user',
           text: transcript,
           timestamp: new Date()
         };
         setTranscripts(prev => [...prev, newTranscript]);
-        sendTranscriptToAPI(transcript, transcripts);
+        
+        // Only send to API if the transcript is substantial
+        if (transcript.trim().length > 3) {
+          sendTranscriptToAPI(transcript, transcripts);
+        }
         setCurrentTranscript('');
+        setIsSpeechBuffering(false);
       }
     },
     onInterviewerSpeaking: setInterviewerSpeaking,
@@ -170,6 +183,7 @@ export function InterviewPage({
               audioLevel={audioLevel}
               isActive={isSpeaking && isListening}
               title="User live audio visualizer"
+              isBuffering={isSpeechBuffering}
             />
 
             {/* Current transcript display */}

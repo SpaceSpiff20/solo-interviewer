@@ -23,7 +23,6 @@ function App() {
   });
   const [apiKeys, setApiKeys] = useState<APIKeys>({
     deepgram: '',
-    speechify: '',
     openai: ''
   });
   const [interviewResults, setInterviewResults] = useState<{

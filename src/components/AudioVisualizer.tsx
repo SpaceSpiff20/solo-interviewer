@@ -6,9 +6,10 @@ interface AudioVisualizerProps {
   isActive: boolean;
   title: string;
   className?: string;
+  isBuffering?: boolean;
 }
 
-export function AudioVisualizer({ audioLevel, isActive, title, className }: AudioVisualizerProps) {
+export function AudioVisualizer({ audioLevel, isActive, title, className, isBuffering = false }: AudioVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
@@ -124,7 +125,12 @@ export function AudioVisualizer({ audioLevel, isActive, title, className }: Audi
       />
       <div className="mt-2 text-center text-sm text-gray-600">
         {actualIsActive ? 'Active' : 'Inactive'} - Level: {Math.round(actualAudioLevel * 100)}%
-        {actualAudioLevel === 0 && actualIsActive && (
+        {isBuffering && (
+          <div className="text-xs text-blue-600 mt-1">
+            Processing speech...
+          </div>
+        )}
+        {actualAudioLevel === 0 && actualIsActive && !isBuffering && (
           <div className="text-xs text-orange-600 mt-1">
             No audio detected. Please check microphone permissions.
           </div>

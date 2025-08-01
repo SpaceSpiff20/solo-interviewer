@@ -4,6 +4,7 @@ import { APIKeys, InterviewData } from '@/types/interview';
 interface UseInterviewStreamProps {
   apiKeys: APIKeys;
   interviewData: InterviewData;
+  voice?: string;
   onTranscript: (transcript: string, isFinal: boolean) => void;
   onInterviewerSpeaking: (speaking: boolean) => void;
   onError: (error: string) => void;
@@ -12,6 +13,7 @@ interface UseInterviewStreamProps {
 export function useInterviewStream({
   apiKeys,
   interviewData,
+  voice = 'oliver',
   onTranscript,
   onInterviewerSpeaking,
   onError
@@ -27,6 +29,14 @@ export function useInterviewStream({
   const analyser = useRef<AnalyserNode | null>(null);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
   const isListeningRef = useRef(false);
+  const isProcessingRef = useRef(false); // Prevent multiple simultaneous API calls
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Speech buffering state
+  const currentTranscriptRef = useRef('');
+  const finalTranscriptRef = useRef('');
+  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  //const isSpeakingRef = useRef(false);
 
   const initializeAudio = useCallback(async () => {
     try {
@@ -76,13 +86,31 @@ export function useInterviewStream({
     }
   }, [onError]);
 
+  const handleSpeechTimeout = useCallback(() => {
+    if (finalTranscriptRef.current.trim().length > 0) {
+      console.log('Speech timeout - sending accumulated transcript:', finalTranscriptRef.current);
+      // Call the original onTranscript with the accumulated final transcript
+      onTranscript(finalTranscriptRef.current, true);
+      // Reset the transcripts
+      currentTranscriptRef.current = '';
+      finalTranscriptRef.current = '';
+    }
+    speechTimeoutRef.current = null;
+  }, [onTranscript]);
+
   const connectToDeepgram = useCallback(() => {
     if (!apiKeys.deepgram) {
       onError('Deepgram API key required');
       return;
     }
 
-    const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&interim_results=true&endpointing=300`;
+    // Close existing connection if any
+    if (deepgramSocket.current) {
+      deepgramSocket.current.close();
+      deepgramSocket.current = null;
+    }
+
+    const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=en&smart_format=true&interim_results=true&endpointing=300&punctuate=true&diarize=true`;
     
     deepgramSocket.current = new WebSocket(wsUrl, ['token', apiKeys.deepgram]);
 
@@ -91,13 +119,51 @@ export function useInterviewStream({
     };
 
     deepgramSocket.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.channel?.alternatives?.[0]) {
-        const transcript = data.channel.alternatives[0].transcript;
-        const isFinal = data.is_final;
-        if (transcript) {
-          onTranscript(transcript, isFinal);
+      try {
+        const data = JSON.parse(event.data);
+        if (data.channel?.alternatives?.[0]) {
+          const transcript = data.channel.alternatives[0].transcript;
+          const isFinal = data.is_final;
+          
+          if (transcript && transcript.trim()) {
+            // Clear any existing timeout
+            if (speechTimeoutRef.current) {
+              clearTimeout(speechTimeoutRef.current);
+              speechTimeoutRef.current = null;
+            }
+
+            // Update the current transcript for display
+            currentTranscriptRef.current = transcript;
+            
+            // If this is a final result, accumulate it to the final transcript
+            if (isFinal) {
+              if (finalTranscriptRef.current) {
+                // Append to existing transcript with a space
+                finalTranscriptRef.current += ' ' + transcript;
+                console.log('Appended final transcript. Total:', finalTranscriptRef.current);
+              } else {
+                // Start new transcript
+                finalTranscriptRef.current = transcript;
+                console.log('Started new final transcript:', finalTranscriptRef.current);
+              }
+            } else {
+              // For interim results, if we have a final transcript, append to it
+              if (finalTranscriptRef.current) {
+                // Show the accumulated transcript plus current interim
+                const fullTranscript = finalTranscriptRef.current + ' ' + transcript;
+                onTranscript(fullTranscript, false);
+              } else {
+                // Just show the current interim transcript
+                onTranscript(transcript, false);
+              }
+            }
+
+            // Set a 3-second timeout to send the final transcript
+            speechTimeoutRef.current = setTimeout(handleSpeechTimeout, 3000);
+          }
         }
+      } catch (error) {
+        console.error('Error parsing Deepgram message:', error);
       }
     };
 
@@ -106,10 +172,23 @@ export function useInterviewStream({
       onError('Connection to speech recognition failed');
     };
 
-    deepgramSocket.current.onclose = () => {
-      console.log('Deepgram connection closed');
+    deepgramSocket.current.onclose = (event) => {
+      console.log('Deepgram connection closed:', event.code, event.reason);
+      // Only show error if it wasn't a clean close
+      if (event.code !== 1000) {
+        onError('Speech recognition connection lost');
+        
+        // Attempt to reconnect after 2 seconds
+        if (isListeningRef.current && reconnectTimeoutRef.current === null) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            console.log('Attempting to reconnect to Deepgram...');
+            reconnectTimeoutRef.current = null;
+            connectToDeepgram();
+          }, 2000);
+        }
+      }
     };
-  }, [apiKeys.deepgram, onTranscript, onError]);
+  }, [apiKeys.deepgram, onTranscript, onError, handleSpeechTimeout]);
 
   const startListening = useCallback(async () => {
     try {
@@ -129,10 +208,15 @@ export function useInterviewStream({
           }
         };
 
-        mediaRecorder.current.start(100); // Send data every 100ms
-        setIsListening(true);
-        setIsSpeaking(true);
-        isListeningRef.current = true;
+        // Wait a bit for the WebSocket to be ready
+        setTimeout(() => {
+          if (mediaRecorder.current && deepgramSocket.current?.readyState === WebSocket.OPEN) {
+            mediaRecorder.current.start(100); // Send data every 100ms
+            setIsListening(true);
+            setIsSpeaking(true);
+            isListeningRef.current = true;
+          }
+        }, 500);
       }
     } catch (error) {
       onError('Failed to start listening');
@@ -149,16 +233,31 @@ export function useInterviewStream({
     if (audioContext.current) {
       audioContext.current.close();
     }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (speechTimeoutRef.current) {
+      clearTimeout(speechTimeoutRef.current);
+      speechTimeoutRef.current = null;
+    }
     setIsListening(false);
     setIsSpeaking(false);
     setAudioLevel(0);
     isListeningRef.current = false;
+    
+    // Reset speech buffering state
+    currentTranscriptRef.current = '';
+    finalTranscriptRef.current = '';
   }, []);
 
   const playInterviewerAudio = useCallback(async (audioUrl: string) => {
     try {
+      // Stop any currently playing audio
       if (currentAudio.current) {
         currentAudio.current.pause();
+        currentAudio.current.src = '';
+        currentAudio.current.load();
       }
 
       currentAudio.current = new Audio(audioUrl);
@@ -173,15 +272,13 @@ export function useInterviewStream({
       analyser.connect(audioContext.destination);
 
       const monitorInterviewerLevel = () => {
-        if (analyser) {
+        if (analyser && currentAudio.current && !currentAudio.current.paused) {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
           analyser.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
           setInterviewerAudioLevel(average / 255);
           
-          if (!currentAudio.current?.paused) {
-            requestAnimationFrame(monitorInterviewerLevel);
-          }
+          requestAnimationFrame(monitorInterviewerLevel);
         }
       };
 
@@ -192,16 +289,34 @@ export function useInterviewStream({
       currentAudio.current.onended = () => {
         onInterviewerSpeaking(false);
         setInterviewerAudioLevel(0);
+        // Clean up the audio URL to free memory
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      currentAudio.current.onerror = () => {
+        onInterviewerSpeaking(false);
+        setInterviewerAudioLevel(0);
+        onError('Failed to play interviewer audio');
+        URL.revokeObjectURL(audioUrl);
       };
 
       await currentAudio.current.play();
     } catch (error) {
       onError('Failed to play interviewer audio');
       onInterviewerSpeaking(false);
+      URL.revokeObjectURL(audioUrl);
     }
   }, [onInterviewerSpeaking, onError]);
 
   const sendTranscriptToAPI = useCallback(async (transcript: string, conversationHistory: any[]) => {
+    // Prevent multiple simultaneous API calls
+    if (isProcessingRef.current) {
+      console.log('Already processing a transcript, skipping:', transcript);
+      return;
+    }
+
+    isProcessingRef.current = true;
+    
     try {
       console.log('Sending transcript to API:', transcript);
       
@@ -214,7 +329,8 @@ export function useInterviewStream({
           transcript,
           conversationHistory,
           apiKeys,
-          interviewData
+          interviewData,
+          voice
         })
       });
 
@@ -256,8 +372,10 @@ export function useInterviewStream({
       console.error('Interview API error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       onError(`Failed to communicate with interviewer API: ${errorMessage}`);
+    } finally {
+      isProcessingRef.current = false;
     }
-  }, [apiKeys, interviewData, playInterviewerAudio, onError]);
+  }, [apiKeys, interviewData, playInterviewerAudio, onError, voice]);
 
   useEffect(() => {
     return () => {
