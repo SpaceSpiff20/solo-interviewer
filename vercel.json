@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/**/*.cts": {
-      "runtime": "nodejs@22.x"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
