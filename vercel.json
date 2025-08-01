@@ -1,4 +1,12 @@
 {
+  "functions": {
+    "api/interview.ts": {
+      "maxDuration": 30
+    },
+    "api/reflection.ts": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
