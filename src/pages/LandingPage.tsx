@@ -35,8 +35,8 @@ export function LandingPage({ onLogin }: LandingPageProps) {
           </div>
 
           <div className="flex items-center">
-            <div className="text-blue-500 text-4xl mr-4">*</div>
             <div className="border-4 border-black bg-white p-4 shadow-[6px_6px_0_0_#000]">
+            <div className="text-blue-500 text-4xl mr-4">*</div>
               <p className="text-lg font-medium">said with no sarcasm at all...</p>
             </div>
           </div>
@@ -47,7 +47,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
           <div className="border-4 border-black bg-white p-8 shadow-[8px_8px_0_0_#000] w-96">
             <div className="flex items-center mb-6">
               <div className="text-blue-500 text-6xl mr-4">*</div>
-              <div className="border-4 border-black bg-white p-4 shadow-[4px_4px_0_0_#000] flex-1">
+              <div className="border-4 border-black bg-white p-4 shadow-[4px_4px_0_0_#000]">
                 <h2 className="text-xl font-bold">Login to your account</h2>
                 <p className="text-sm text-gray-600 mt-1">Enter your email below to login to your account</p>
               </div>
