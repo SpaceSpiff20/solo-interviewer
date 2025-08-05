@@ -3,10 +3,8 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Readable } from 'node:stream';
 import { SpeechifyClient } from "@speechify/api";
 
-// Add timeout handling
-const TIMEOUT_MS = 25000; // 25 seconds to stay under 30s limit
-
-async function handler(req: VercelRequest, res: VercelResponse) {
+// Hopefully ensures proper ES module handling
+const handler = async (req: VercelRequest, res: VercelResponse) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -218,6 +216,6 @@ Guidelines:
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-}
+};
 
 export default handler;

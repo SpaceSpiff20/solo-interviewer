@@ -77,7 +77,7 @@ function App() {
           setInterviewResults({
             transcripts,
             duration,
-            summary: "Interview completed successfully. Detailed analysis unavailable.",
+            summary: "Interview completed successfully. Detailed analysis unavailable. API failed",
             feedbackMoments: []
           });
         }
