@@ -73,17 +73,15 @@ export function InterviewSettings({ settings, onChange, onStart, className }: In
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="oliver">Oliver (Speechify - Premium)</SelectItem>
-              <SelectItem value="alloy">Alloy (OpenAI - Standard)</SelectItem>
-              <SelectItem value="echo">Echo (OpenAI - Standard)</SelectItem>
-              <SelectItem value="fable">Fable (OpenAI - Standard)</SelectItem>
-              <SelectItem value="onyx">Onyx (OpenAI - Standard)</SelectItem>
-              <SelectItem value="nova">Nova (OpenAI - Standard)</SelectItem>
-              <SelectItem value="shimmer">Shimmer (OpenAI - Standard)</SelectItem>
+              <SelectItem value="oliver">Oliver</SelectItem>
+              <SelectItem value="geoge">Geoge</SelectItem>
+              <SelectItem value="henry">Henry</SelectItem>
+              <SelectItem value="lisa">Lisa</SelectItem>
+              <SelectItem value="emily">Emily</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-sm text-gray-500 mt-1">
-            {settings.voice === 'oliver' ? 'Speechify provides higher quality voices' : 'OpenAI voices are included with your OpenAI API key'}
+            All voices use Speechify for high-quality audio synthesis
           </p>
         </div>
 

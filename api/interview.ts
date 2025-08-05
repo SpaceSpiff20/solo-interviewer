@@ -33,6 +33,11 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       return res.status(400).json({ error: 'Missing required OpenAI API key' });
     }
 
+    if (!apiKeys?.speechify) {
+      console.error('Missing API key:', { speechify: !!apiKeys?.speechify });
+      return res.status(400).json({ error: 'Missing required Speechify API key' });
+    }
+
     // Prepare the conversation context for OpenAI
     const systemPrompt = `You are conducting a job interview. You have access to the candidate's resume and the job description. Ask relevant, professional questions based on this information. Keep responses concise and natural. End the interview when you feel you have gathered sufficient information.
 
@@ -125,63 +130,39 @@ Guidelines:
     let audioData: ArrayBuffer;
     
     try {
-      if (apiKeys.speechify) {
-        // Use Speechify for higher quality TTS
-        console.log('Using Speechify for TTS...');
-        const client = new SpeechifyClient({ token: apiKeys.speechify });
-        
-        // Map voice to Speechify voice ID
-        const speechifyVoiceId = voice === 'oliver' ? 'oliver' : 'oliver'; // Default to oliver for now
-        
-        const speechifyResponse = await client.tts.audio.stream({
-          accept: "audio/mpeg",
-          input: interviewerResponse,
-          language: "en",
-          model: "simba-english",
-          voiceId: speechifyVoiceId
-        });
+      // Use Speechify for TTS (now required)
+      console.log('Using Speechify for TTS...');
+      const client = new SpeechifyClient({ token: apiKeys.speechify });
+      
+      // Map voice to Speechify voice ID
+      const voiceMapping: Record<string, string> = {
+        'oliver': 'oliver',
+        'geoge': 'geoge', 
+        'henry': 'henry',
+        'lisa': 'lisa',
+        'emily': 'emily'
+      };
+      
+      const speechifyVoiceId = voiceMapping[voice] || 'oliver'; // Default to oliver if voice not found
+      
+      const speechifyResponse = await client.tts.audio.stream({
+        accept: "audio/mpeg",
+        input: interviewerResponse,
+        language: "en",
+        model: "simba-english",
+        voiceId: speechifyVoiceId
+      });
 
-        clearTimeout(ttsTimeout);
+      clearTimeout(ttsTimeout);
 
-        // Convert Readable stream to ArrayBuffer
-        const chunks: Buffer[] = [];
-        for await (const chunk of speechifyResponse) {
-          chunks.push(Buffer.from(chunk));
-        }
-        
-        audioData = Buffer.concat(chunks);
-        console.log('Speechify TTS response received, audio size:', audioData.byteLength, 'bytes');
-        
-      } else {
-        // Fallback to OpenAI TTS
-        console.log('Using OpenAI TTS (fallback)...');
-        const ttsResponse = await fetch('https://api.openai.com/v1/audio/speech', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKeys.openai}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: interviewerResponse,
-            voice: voice === 'oliver' ? 'alloy' : voice, // Map oliver to alloy for OpenAI
-            response_format: 'mp3',
-            speed: 1.0,
-          }),
-          signal: ttsController.signal,
-        });
-
-        clearTimeout(ttsTimeout);
-
-        if (!ttsResponse.ok) {
-          const errorText = await ttsResponse.text();
-          console.error('OpenAI TTS API error:', ttsResponse.status, errorText);
-          throw new Error(`OpenAI TTS API error: ${ttsResponse.status} - ${errorText}`);
-        }
-
-        audioData = await ttsResponse.arrayBuffer();
-        console.log('OpenAI TTS response received, audio size:', audioData.byteLength, 'bytes');
+      // Convert Readable stream to ArrayBuffer
+      const chunks: Buffer[] = [];
+      for await (const chunk of speechifyResponse) {
+        chunks.push(Buffer.from(chunk));
       }
+      
+      audioData = Buffer.concat(chunks);
+      console.log('Speechify TTS response received, audio size:', audioData.byteLength, 'bytes');
       
     } catch (ttsError) {
       clearTimeout(ttsTimeout);

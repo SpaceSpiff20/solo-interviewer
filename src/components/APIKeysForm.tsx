@@ -14,12 +14,12 @@ export function APIKeysForm({ apiKeys, onChange, className }: APIKeysFormProps) 
     onChange({ ...apiKeys, [key]: value });
   };
 
-  const isValid = apiKeys.deepgram && apiKeys.openai;
+  const isValid = apiKeys.deepgram && apiKeys.openai && apiKeys.speechify;
 
   return (
     <div className={cn("border-4 border-black bg-white p-6 shadow-[8px_8px_0_0_#000]", className)}>
       <h2 className="text-2xl font-bold mb-2">API Keys</h2>
-      <p className="text-gray-600 mb-6">You'll need OpenAI and Deepgram API keys. Speechify is optional for enhanced voice quality.</p>
+      <p className="text-gray-600 mb-6">You'll need OpenAI, Deepgram, and Speechify API keys.</p>
 
       <div className="space-y-4">
         <div>
@@ -47,12 +47,12 @@ export function APIKeysForm({ apiKeys, onChange, className }: APIKeysFormProps) 
         </div>
 
         <div>
-          <Label htmlFor="speechify" className="text-base font-medium">Speechify API key (optional):</Label>
+          <Label htmlFor="speechify" className="text-base font-medium">Speechify API key:</Label>
           <Input
             id="speechify"
             type="password"
-            placeholder="Paste API key here (optional)"
-            value={apiKeys.speechify || ''}
+            placeholder="Paste API key here"
+            value={apiKeys.speechify}
             onChange={(e) => updateKey('speechify', e.target.value)}
             className="border-2 border-black"
           />
@@ -61,7 +61,7 @@ export function APIKeysForm({ apiKeys, onChange, className }: APIKeysFormProps) 
       </div>
 
       {!isValid && (
-        <p className="text-red-600 text-sm mt-4">OpenAI and Deepgram API keys are required to proceed.</p>
+        <p className="text-red-600 text-sm mt-4">OpenAI, Deepgram, and Speechify API keys are required to proceed.</p>
       )}
     </div>
   );

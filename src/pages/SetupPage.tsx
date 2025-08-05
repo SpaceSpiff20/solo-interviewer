@@ -41,6 +41,7 @@ export function SetupPage({ onStartInterview }: SetupPageProps) {
   const [apiKeys, setApiKeys] = useState<APIKeys>({
     deepgram: '',
     openai: '',
+    speechify: '',
   });
   const [settings, setSettings] = useState<IInterviewSettings>({
     duration: 15,
@@ -60,7 +61,7 @@ export function SetupPage({ onStartInterview }: SetupPageProps) {
     setInterviewData(prev => ({ ...prev, [pageId]: value }));
   };
 
-  const isApiKeysValid = apiKeys.deepgram && apiKeys.openai;
+  const isApiKeysValid = apiKeys.deepgram && apiKeys.openai && apiKeys.speechify;
 
   const handleStartInterview = () => {
     onStartInterview(interviewData, settings, apiKeys);
