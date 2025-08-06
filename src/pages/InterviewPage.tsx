@@ -145,7 +145,7 @@ export function InterviewPage({
   };
 
   return (
-    <div className="min-h-screen bg-blue-200 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-200 to-purple-200 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="border-4 border-black bg-white p-4 shadow-[8px_8px_0_0_#000]">
