@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import { MultiPageTextInput } from '@/components/MultiPageTextInput';
 import { InterviewData } from '@/types/interview';
 
@@ -39,7 +38,6 @@ export function InterviewInfo({ interviewData, onInterviewDataChange, onNext }: 
     onNext();
   };
 
-  const hasRequiredData = interviewData.jobDescription && interviewData.resume;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 to-purple-200 flex items-center p-6">
