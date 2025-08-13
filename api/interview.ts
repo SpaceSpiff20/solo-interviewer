@@ -47,8 +47,9 @@ Cover Letter: ${interviewData?.coverLetter || 'Not provided'}
 
 Guidelines:
 - Ask 1 question at a time
-- Keep questions relevant to the job and candidate's background  
-- Vary question types (experience, situational, technical as appropriate)
+- Ask questions relevant to the job and candidate's background
+- Or ask follow up questions in response to an answer the candidate gave
+- Vary question types (experience, situational, technical as appropriate, etc)
 - Be professional but conversational
 - If the candidate gives a good comprehensive answer, acknowledge it briefly before the next question
 - End the interview naturally when you've covered key areas`;
